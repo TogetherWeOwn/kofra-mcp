@@ -9,9 +9,12 @@
 // generated/errors.json and generated/docs/errors/*.md. Files that kofra-api
 // no longer publishes are removed from content/ so the two never drift.
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CONTENT_DIR, generate } from './generate.mjs';
+import { CONTENT_DIR, generate, readText } from './generate.mjs';
+
+/** Copies a text file with LF line endings, whatever the source checkout used. */
+const copyText = (from, to) => writeFileSync(to, readText(from));
 
 function fail(message) {
 	console.error(`sync-content: ${message}`);
@@ -35,8 +38,8 @@ if (git('status', '--porcelain', '--', 'generated')) {
 }
 
 mkdirSync(join(CONTENT_DIR, 'docs'), { recursive: true });
-copyFileSync(join(generated, 'openapi.json'), join(CONTENT_DIR, 'openapi.json'));
-copyFileSync(join(generated, 'errors.json'), join(CONTENT_DIR, 'errors.json'));
+copyText(join(generated, 'openapi.json'), join(CONTENT_DIR, 'openapi.json'));
+copyText(join(generated, 'errors.json'), join(CONTENT_DIR, 'errors.json'));
 
 const errorsOut = join(CONTENT_DIR, 'docs', 'errors');
 rmSync(errorsOut, { recursive: true, force: true });
@@ -44,7 +47,7 @@ mkdirSync(errorsOut, { recursive: true });
 const pages = readdirSync(join(generated, 'docs', 'errors'))
 	.filter((f) => f.endsWith('.md'))
 	.sort();
-for (const f of pages) copyFileSync(join(generated, 'docs', 'errors', f), join(errorsOut, f));
+for (const f of pages) copyText(join(generated, 'docs', 'errors', f), join(errorsOut, f));
 
 writeFileSync(
 	join(CONTENT_DIR, 'SOURCE'),

@@ -32,7 +32,13 @@ const API_BASE_FALLBACK = 'https://api.kofra.app';
 const TITLE_WEIGHT = 3;
 const SLUG_WEIGHT = 2;
 
-const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
+/**
+ * Reads a text file with LF line endings, whatever the checkout used (for
+ * example core.autocrlf on Windows), so the bundle and --check do not depend
+ * on it. A lone carriage return is kept and fails the sanitising check.
+ */
+export const readText = (p) => readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
+const readJson = (p) => JSON.parse(readText(p));
 
 // ---------------------------------------------------------------------------
 // API reference pages
@@ -358,7 +364,7 @@ const ROBOTS = 'User-agent: *\nDisallow: /\n';
 // ---------------------------------------------------------------------------
 
 function readSource() {
-	const text = readFileSync(join(CONTENT_DIR, 'SOURCE'), 'utf8');
+	const text = readText(join(CONTENT_DIR, 'SOURCE'));
 	const m = text.match(/^commit=([0-9a-f]{40})$/m);
 	if (!m) throw new Error('content/SOURCE has no commit= line');
 	return m[1];
@@ -376,7 +382,9 @@ function readSource() {
  */
 export function unsanitisedStrings(bundle) {
 	const bad = [];
-	const dirty = (s) => typeof s === 'string' && stripControls(s) !== s;
+	// CRLF counts as a plain line break here (stripControls turns it into LF);
+	// any other control character, a lone CR included, is still reported.
+	const dirty = (s) => typeof s === 'string' && stripControls(s) !== s.replace(/\r\n/g, '\n');
 	const walkValue = (value, path) => {
 		if (typeof value === 'string') {
 			if (dirty(value)) bad.push(path);
@@ -413,7 +421,7 @@ export function generate({ check }) {
 	// Pages: the hand-written ones and the copied error pages on disk, plus
 	// the API pages from memory (so --check sees what would be written).
 	const onDisk = walk(DOCS_DIR).filter((p) => !p.startsWith(API_DIR + '/'));
-	const sources = new Map(onDisk.map((p) => [p, readFileSync(p, 'utf8')]));
+	const sources = new Map(onDisk.map((p) => [p, readText(p)]));
 	for (const [p, text] of outputs) sources.set(p, text);
 	const pages = [...sources]
 		.map(([p, text]) => {
@@ -430,7 +438,7 @@ export function generate({ check }) {
 		pages: pages.map(({ slug, title, description, text }) => ({ slug, title, description, text })),
 		index: buildIndex(pages),
 		errors,
-		openapi: readFileSync(join(CONTENT_DIR, 'openapi.json'), 'utf8'),
+		openapi: readText(join(CONTENT_DIR, 'openapi.json')),
 		discovery: { llmsTxt: llmsTxt(pages), mcpJson: mcpJson(), robotsTxt: ROBOTS }
 	};
 	const unsanitised = unsanitisedStrings(bundle);
@@ -450,7 +458,7 @@ export function generate({ check }) {
 	}
 	for (const [p, text] of outputs) {
 		if (!existsSync(p)) problems.push(`missing: ${relative(ROOT, p)}`);
-		else if (readFileSync(p, 'utf8') !== text) problems.push(`stale: ${relative(ROOT, p)}`);
+		else if (readText(p) !== text) problems.push(`stale: ${relative(ROOT, p)}`);
 	}
 	if (!check) {
 		rmSync(API_DIR, { recursive: true, force: true });

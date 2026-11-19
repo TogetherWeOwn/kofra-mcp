@@ -1,9 +1,12 @@
-import type { Client } from '@modelcontextprotocol/client';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { content } from '../src/content';
 import { stripControls } from '../src/sanitize';
 import { search } from '../src/search';
-import { unsanitisedStrings } from '../tools/generate.mjs';
+import { readText, unsanitisedStrings } from '../tools/generate.mjs';
 import { BASE, call, connect, type Era } from './helpers';
 
 const INIT = JSON.stringify({
@@ -213,5 +216,117 @@ describe('Origin, exact match', () => {
 		expect(none.status).toBe(200);
 		expect(none.headers.get('Access-Control-Allow-Origin')).not.toBe('*');
 		await none.body?.cancel();
+	});
+});
+
+describe('browser preflight for the MCP transports', () => {
+	// Request headers a browser may send without a preflight (Fetch "CORS-safelisted").
+	const SAFELISTED = new Set(['accept', 'accept-language', 'content-language']);
+
+	/** The header names the real SDK client sends while it connects, lists and calls a tool. */
+	async function headersSentBy(era: Era): Promise<Set<string>> {
+		const names = new Set<string>();
+		const client = new Client(
+			{ name: 'preflight-probe', version: '0.0.0' },
+			era === 'modern' ? { versionNegotiation: { mode: { pin: '2026-07-28' } } } : {}
+		);
+		const transport = new StreamableHTTPClientTransport(new URL(`${BASE}/docs`), {
+			fetch: async (url, init) => {
+				new Headers(init?.headers).forEach((_v, k) => names.add(k.toLowerCase()));
+				return call(url instanceof URL ? url.href : url, init);
+			}
+		});
+		await client.connect(transport);
+		await client.listTools();
+		await client.callTool({ name: 'docs_search', arguments: { query: 'bucket' } });
+		await client.readResource({ uri: 'kofra://openapi' });
+		await client.close();
+		return names;
+	}
+
+	for (const era of ['modern', 'legacy'] as Era[]) {
+		it(`allows every non-safelisted header the ${era} client sends`, async () => {
+			const sent = [...(await headersSentBy(era))].filter((h) => !SAFELISTED.has(h));
+			expect(sent).toContain('content-type');
+			if (era === 'modern')
+				expect(sent).toEqual(expect.arrayContaining(['mcp-method', 'mcp-protocol-version']));
+			const requested = [
+				...new Set([
+					...sent,
+					'mcp-protocol-version',
+					'mcp-method',
+					'mcp-name',
+					'mcp-session-id',
+					'last-event-id'
+				])
+			];
+			const pre = await call('/docs', {
+				method: 'OPTIONS',
+				headers: {
+					Origin: 'https://console.kofra.app',
+					'Access-Control-Request-Method': 'POST',
+					'Access-Control-Request-Headers': requested.join(', ')
+				}
+			});
+			expect(pre.status).toBeLessThan(300);
+			expect(pre.headers.get('Access-Control-Allow-Origin')).toBe('https://console.kofra.app');
+			const allowed = new Set(
+				(pre.headers.get('Access-Control-Allow-Headers') ?? '')
+					.split(',')
+					.map((h) => h.trim().toLowerCase())
+			);
+			for (const h of requested) expect(allowed.has(h) || allowed.has('*'), h).toBe(true);
+			const methods = (pre.headers.get('Access-Control-Allow-Methods') ?? '').toUpperCase();
+			for (const m of ['GET', 'POST', 'DELETE']) expect(methods).toContain(m);
+		});
+	}
+
+	it('exposes the MCP response headers the client reads', async () => {
+		const res = await call('/docs', {
+			method: 'POST',
+			headers: { ...MCP_HEADERS, Origin: 'https://kofra.app' },
+			body: INIT
+		});
+		await res.body?.cancel();
+		const exposed = new Set(
+			(res.headers.get('Access-Control-Expose-Headers') ?? '')
+				.split(',')
+				.map((h) => h.trim().toLowerCase())
+		);
+		// The SDK client reads Mcp-Session-Id (legacy sessions) and the
+		// negotiated protocol version; Content-Type is always readable.
+		for (const h of ['mcp-session-id', 'mcp-protocol-version'])
+			expect(exposed.has(h), h).toBe(true);
+	});
+});
+
+describe('line endings in the build-time sanitising check', () => {
+	const bundle = (text: string) => ({
+		pages: [{ slug: 'a', title: 'A', description: 'd', text }],
+		errors: [{ code: 'x', detail: text }],
+		openapi: JSON.stringify({ info: { description: 'ok' } }).replace(/,/g, ',\r\n')
+	});
+
+	it('accepts CRLF line endings', () => {
+		expect(unsanitisedStrings(bundle('# A\r\n\r\ntext\r\n'))).toEqual([]);
+	});
+
+	it('still rejects a real control character, and a lone carriage return', () => {
+		expect(unsanitisedStrings(bundle('# A\r\n\u0007\r\n'))).toEqual([
+			'pages[a].text',
+			'errors[0].detail'
+		]);
+		expect(unsanitisedStrings(bundle('# A\rB\n'))).toEqual(['pages[a].text', 'errors[0].detail']);
+	});
+
+	it('reads checked-out files with LF line endings', () => {
+		const dir = mkdtempSync(join(tmpdir(), 'kofra-mcp-eol-'));
+		try {
+			const p = join(dir, 'page.md');
+			writeFileSync(p, '# A\r\n\r\ntext\r\n');
+			expect(readText(p)).toBe('# A\n\ntext\n');
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });
