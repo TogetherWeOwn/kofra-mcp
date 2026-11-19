@@ -1,0 +1,41 @@
+{
+	"name": "kofra-mcp",
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@10.34.9",
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"content": "node tools/sync-content.mjs",
+		"gen": "node tools/generate.mjs",
+		"lint": "prettier --check . && eslint .",
+		"format": "prettier --write .",
+		"check": "wrangler types && tsc --noEmit",
+		"test:unit": "vitest --run",
+		"build": "node tools/generate.mjs --check && wrangler deploy --dry-run --outdir dist",
+		"test:e2e": "node --test e2e/smoke.test.mjs",
+		"f7": "node tools/f7/check.mjs",
+		"f7:build": "node tools/f7/check.mjs dist content discovery generated",
+		"dev": "wrangler dev"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/server": "2.4.0",
+		"agents": "0.33.0",
+		"zod": "^4.2.0"
+	},
+	"devDependencies": {
+		"@eslint/js": "^10.0.1",
+		"@modelcontextprotocol/client": "2.4.0",
+		"@types/node": "^24",
+		"eslint": "^10.15.0",
+		"eslint-config-prettier": "^10.1.8",
+		"globals": "^17.14.0",
+		"prettier": "^3.10.1",
+		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.73.0",
+		"vitest": "^5.1.1",
+		"wrangler": "^4.165.0",
+		"yaml": "2.9.1"
+	}
+}

@@ -1,0 +1,66 @@
+# Kofra documentation
+
+> Markdown copies of the Kofra API documentation. The same pages are searchable through the no-login documentation MCP server at https://mcp.kofra.app/docs (tools `docs_search` and `docs_read`).
+
+## Guides
+
+- [AI agents](https://mcp.kofra.app/docs/ai-agents.md): Connect an AI client to the Kofra documentation MCP server so it can search and read these pages, the API reference and the error catalogue while it helps you. The server needs no login and holds n...
+- [Kofra API conventions](https://mcp.kofra.app/docs/overview.md): The Kofra API manages a storage workspace: buckets, S3 access keys, usage, the account's state and its event feed. Object data never goes through this API; read and write objects through the S3 end...
+
+## API reference
+
+- [Cancel a deletion](https://mcp.kofra.app/docs/api/account.cancel_deletion.md): `POST /v1/account/deletion/cancel`: Cancel a deletion
+- [Request deletion of the account](https://mcp.kofra.app/docs/api/account.delete.md): `DELETE /v1/account`: Request deletion of the account
+- [Get the account](https://mcp.kofra.app/docs/api/account.get.md): `GET /v1/account`: Get the account
+- [Create a bucket](https://mcp.kofra.app/docs/api/buckets.create.md): `POST /v1/buckets`: Create a bucket
+- [Delete a bucket](https://mcp.kofra.app/docs/api/buckets.delete.md): `DELETE /v1/buckets/{bucket}`: Delete a bucket
+- [Get a bucket](https://mcp.kofra.app/docs/api/buckets.get.md): `GET /v1/buckets/{bucket}`: Get a bucket
+- [List buckets](https://mcp.kofra.app/docs/api/buckets.list.md): `GET /v1/buckets`: List buckets
+- [Read the event feed](https://mcp.kofra.app/docs/api/events.list.md): `GET /v1/events`: Read the event feed
+- [Kofra API reference](https://mcp.kofra.app/docs/api/index.md): One page per operation. Every page opens with a runnable `curl` example; set `KOFRA_API_TOKEN` to an API token first. Base URL: `https://api.kofra.app`. The contract itself is the `kofra://openapi`...
+- [Create an access key](https://mcp.kofra.app/docs/api/keys.create.md): `POST /v1/keys`: Create an access key
+- [List access keys](https://mcp.kofra.app/docs/api/keys.list.md): `GET /v1/keys`: List access keys
+- [Revoke an access key](https://mcp.kofra.app/docs/api/keys.revoke.md): `DELETE /v1/keys/{key_id}`: Revoke an access key
+- [Update an access key](https://mcp.kofra.app/docs/api/keys.update.md): `PATCH /v1/keys/{key_id}`: Update an access key
+- [Create a presigned URL](https://mcp.kofra.app/docs/api/objects.presign.md): `POST /v1/objects/presign`: Create a presigned URL
+- [List usage per bucket](https://mcp.kofra.app/docs/api/usage.buckets.md): `GET /v1/usage/buckets`: List usage per bucket
+- [List daily usage](https://mcp.kofra.app/docs/api/usage.days.md): `GET /v1/usage/days`: List daily usage
+- [Get current usage](https://mcp.kofra.app/docs/api/usage.get.md): `GET /v1/usage`: Get current usage
+
+## Errors
+
+- [Account is read-only](https://mcp.kofra.app/docs/errors/account_read_only.md): Error `account_read_only` (HTTP 403): Account is read-only
+- [Account is not available](https://mcp.kofra.app/docs/errors/account_unavailable.md): Error `account_unavailable` (HTTP 403): Account is not available
+- [Bucket already exists](https://mcp.kofra.app/docs/errors/bucket_already_exists.md): Error `bucket_already_exists` (HTTP 409): Bucket already exists
+- [Bucket is not empty](https://mcp.kofra.app/docs/errors/bucket_not_empty.md): Error `bucket_not_empty` (HTTP 409): Bucket is not empty
+- [Bucket not found](https://mcp.kofra.app/docs/errors/bucket_not_found.md): Error `bucket_not_found` (HTTP 404): Bucket not found
+- [Deletion already requested](https://mcp.kofra.app/docs/errors/deletion_already_requested.md): Error `deletion_already_requested` (HTTP 409): Deletion already requested
+- [Deletion can no longer be cancelled](https://mcp.kofra.app/docs/errors/deletion_final.md): Error `deletion_final` (HTTP 409): Deletion can no longer be cancelled
+- [No deletion to cancel](https://mcp.kofra.app/docs/errors/deletion_not_requested.md): Error `deletion_not_requested` (HTTP 409): No deletion to cancel
+- [Event feed was reset](https://mcp.kofra.app/docs/errors/feed_reset.md): Error `feed_reset` (HTTP 409): Event feed was reset
+- [Too many grants on one key](https://mcp.kofra.app/docs/errors/grant_limit_reached.md): Error `grant_limit_reached` (HTTP 409): Too many grants on one key
+- [Access can only be widened](https://mcp.kofra.app/docs/errors/grant_narrowing_refused.md): Error `grant_narrowing_refused` (HTTP 409): Access can only be widened
+- [Same request is still running](https://mcp.kofra.app/docs/errors/idempotency_key_in_use.md): Error `idempotency_key_in_use` (HTTP 409): Same request is still running
+- [Idempotency key used with another request](https://mcp.kofra.app/docs/errors/idempotency_key_reused.md): Error `idempotency_key_reused` (HTTP 422): Idempotency key used with another request
+- [Kofra API errors](https://mcp.kofra.app/docs/errors/index.md): Every error is an RFC 9457 `application/problem+json` body with a stable `code`, a one-sentence `hint` that says what to do next, a `docs_url` to the page for that code, the `request_id`, and `retr...
+- [Token lacks a required scope](https://mcp.kofra.app/docs/errors/insufficient_scope.md): Error `insufficient_scope` (HTTP 403): Token lacks a required scope
+- [Internal error](https://mcp.kofra.app/docs/errors/internal_error.md): Error `internal_error` (HTTP 500): Internal error
+- [Bucket name is not valid](https://mcp.kofra.app/docs/errors/invalid_bucket_name.md): Error `invalid_bucket_name` (HTTP 400): Bucket name is not valid
+- [Cursor is not valid](https://mcp.kofra.app/docs/errors/invalid_cursor.md): Error `invalid_cursor` (HTTP 400): Cursor is not valid
+- [Too many active access keys](https://mcp.kofra.app/docs/errors/key_limit_reached.md): Error `key_limit_reached` (HTTP 409): Too many active access keys
+- [Access key not found](https://mcp.kofra.app/docs/errors/key_not_found.md): Error `key_not_found` (HTTP 404): Access key not found
+- [Method not allowed](https://mcp.kofra.app/docs/errors/method_not_allowed.md): Error `method_not_allowed` (HTTP 405): Method not allowed
+- [No such endpoint](https://mcp.kofra.app/docs/errors/not_found.md): Error `not_found` (HTTP 404): No such endpoint
+- [Request body is too large](https://mcp.kofra.app/docs/errors/payload_too_large.md): Error `payload_too_large` (HTTP 413): Request body is too large
+- [Too many requests](https://mcp.kofra.app/docs/errors/rate_limited.md): Error `rate_limited` (HTTP 429): Too many requests
+- [Your role does not allow this](https://mcp.kofra.app/docs/errors/role_forbidden.md): Error `role_forbidden` (HTTP 403): Your role does not allow this
+- [Service is busy](https://mcp.kofra.app/docs/errors/service_unavailable.md): Error `service_unavailable` (HTTP 503): Service is busy
+- [API token has expired](https://mcp.kofra.app/docs/errors/token_expired.md): Error `token_expired` (HTTP 401): API token has expired
+- [Authentication required](https://mcp.kofra.app/docs/errors/unauthenticated.md): Error `unauthenticated` (HTTP 401): Authentication required
+- [Request has a field the API does not know](https://mcp.kofra.app/docs/errors/unknown_field.md): Error `unknown_field` (HTTP 400): Request has a field the API does not know
+- [Body must be JSON](https://mcp.kofra.app/docs/errors/unsupported_media_type.md): Error `unsupported_media_type` (HTTP 415): Body must be JSON
+- [Request is not valid](https://mcp.kofra.app/docs/errors/validation_failed.md): Error `validation_failed` (HTTP 400): Request is not valid
+
+## Optional
+
+- [OpenAPI 3.1 contract](https://api.kofra.app/openapi.json): every operation, schema, example and error

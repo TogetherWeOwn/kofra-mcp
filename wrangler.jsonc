@@ -1,0 +1,17 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	// The no-login documentation MCP server. Not deployed from this
+	// repository: there is no deploy workflow yet.
+	"name": "kofra-mcp-docs",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-11-19",
+	// agents/mcp/server uses AsyncLocalStorage.
+	"compatibility_flags": ["nodejs_compat"],
+	// Preview on workers.dev only; no routes, no per-version preview URLs.
+	"workers_dev": true,
+	"preview_urls": false,
+	// The documentation bundle is a separate text module, not code (see src/content.ts).
+	"rules": [{ "type": "Text", "globs": ["**/generated/content.json"], "fallthrough": false }],
+	// No bindings: the documentation is compiled into the Worker.
+	"observability": { "enabled": false }
+}

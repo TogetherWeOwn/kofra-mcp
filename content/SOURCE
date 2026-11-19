@@ -1,0 +1,4 @@
+# Copied from TogetherWeOwn/kofra-api by tools/sync-content.mjs. Do not edit by hand.
+repository=TogetherWeOwn/kofra-api
+commit=2616a306640297cfcb8bb9cb0bcdcf5fd4d7401f
+files=generated/openapi.json generated/errors.json generated/docs/errors/*.md

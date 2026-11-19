@@ -1,0 +1,14 @@
+{
+	"name": "Kofra",
+	"description": "Model Context Protocol servers for Kofra.",
+	"servers": [
+		{
+			"name": "kofra-docs",
+			"title": "Kofra documentation",
+			"description": "Search and read the Kofra API documentation, API reference and error catalogue. No login and no account data.",
+			"url": "https://mcp.kofra.app/docs",
+			"transport": "streamable-http",
+			"authentication": "none"
+		}
+	]
+}
