@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -377,13 +377,32 @@ describe('line endings in the build-time sanitising check', () => {
 			expect(generate({ check: true }).problems, 'outputs must be current first').toEqual([]);
 			writeFileSync(robots, original.toString('utf8').replace('\n', '\r\r\n'));
 			expect(generate({ check: true }).problems).toEqual(['malformed: discovery/robots.txt']);
-			expect(generate({ check: false }).problems).toEqual(['malformed: discovery/robots.txt']);
+			const fixed = generate({ check: false });
+			expect(fixed.problems).toEqual(['malformed: discovery/robots.txt']);
+			// Only the planted file is written; nothing else is removed or rewritten.
+			expect(fixed.changed).toEqual(['discovery/robots.txt']);
 			expect(readFileSync(robots).equals(original)).toBe(true);
 			expect(generate({ check: true }).problems).toEqual([]);
 		} finally {
 			writeFileSync(robots, original);
 		}
 	});
+
+	it.skipIf(process.getuid?.() === 0)(
+		'generate throws when an existing output cannot be read, before writing anything',
+		() => {
+			const robots = fileURLToPath(new URL('../discovery/robots.txt', import.meta.url).href);
+			const mode = statSync(robots).mode & 0o777;
+			try {
+				chmodSync(robots, 0o000);
+				expect(() => generate({ check: false })).toThrow(/EACCES|permission denied/i);
+				expect(() => generate({ check: true })).toThrow(/EACCES|permission denied/i);
+			} finally {
+				chmodSync(robots, mode);
+			}
+			expect(generate({ check: true }).problems).toEqual([]);
+		}
+	);
 
 	it('throws an unreadable output instead of reporting it as malformed', () => {
 		const dir = mkdtempSync(join(tmpdir(), 'kofra-mcp-eol-'));

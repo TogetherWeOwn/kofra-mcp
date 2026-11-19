@@ -465,9 +465,16 @@ export function generate({ check }) {
 	outputs.set(join(ROOT, 'discovery', '.well-known', 'mcp.json'), bundle.discovery.mcpJson);
 
 	const problems = [];
+	// Write mode touches only what differs: extra pages are removed, and only
+	// missing, malformed or stale outputs are written.
+	const extra = [];
+	const changed = [];
 	const existingApi = existsSync(API_DIR) ? walk(API_DIR) : [];
 	for (const p of existingApi) {
-		if (!outputs.has(p)) problems.push(`extra: ${relative(ROOT, p)}`);
+		if (!outputs.has(p)) {
+			extra.push(p);
+			problems.push(`extra: ${relative(ROOT, p)}`);
+		}
 	}
 	// Existing outputs are only compared, never trusted: one that readText
 	// refuses for a stray carriage return is reported as malformed, so --check
@@ -475,6 +482,7 @@ export function generate({ check }) {
 	// unreadable file) is thrown here, before anything is written.
 	for (const [p, text] of outputs) {
 		if (!existsSync(p)) {
+			changed.push(p);
 			problems.push(`missing: ${relative(ROOT, p)}`);
 			continue;
 		}
@@ -483,19 +491,28 @@ export function generate({ check }) {
 			current = readText(p);
 		} catch (err) {
 			if (!(err instanceof StrayCarriageReturnError)) throw err;
+			changed.push(p);
 			problems.push(`malformed: ${relative(ROOT, p)}`);
 			continue;
 		}
-		if (current !== text) problems.push(`stale: ${relative(ROOT, p)}`);
-	}
-	if (!check) {
-		rmSync(API_DIR, { recursive: true, force: true });
-		for (const [p, text] of outputs) {
-			mkdirSync(dirname(p), { recursive: true });
-			writeFileSync(p, text);
+		if (current !== text) {
+			changed.push(p);
+			problems.push(`stale: ${relative(ROOT, p)}`);
 		}
 	}
-	return { problems, written: outputs.size, pages: pages.length };
+	if (!check) {
+		for (const p of extra) rmSync(p, { force: true });
+		for (const p of changed) {
+			mkdirSync(dirname(p), { recursive: true });
+			writeFileSync(p, outputs.get(p));
+		}
+	}
+	return {
+		problems,
+		written: outputs.size,
+		changed: check ? [] : changed.map((p) => relative(ROOT, p)),
+		pages: pages.length
+	};
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
