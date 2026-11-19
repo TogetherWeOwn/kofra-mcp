@@ -7,7 +7,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { content } from '../src/content';
 import { stripControls } from '../src/sanitize';
 import { search } from '../src/search';
-import { generate, readText, unsanitisedStrings } from '../tools/generate.mjs';
+import {
+	generate,
+	readText,
+	StrayCarriageReturnError,
+	unsanitisedStrings
+} from '../tools/generate.mjs';
 import { BASE, call, connect, type Era } from './helpers';
 
 const INIT = JSON.stringify({
@@ -366,13 +371,35 @@ describe('line endings in the build-time sanitising check', () => {
 		const robots = fileURLToPath(new URL('../discovery/robots.txt', import.meta.url).href);
 		const original = readFileSync(robots);
 		try {
+			// Write mode below runs on the real checkout. It may only touch the
+			// planted file, so the test refuses to go on unless every other output
+			// is already current (otherwise run `pnpm run gen` first).
+			expect(generate({ check: true }).problems, 'outputs must be current first').toEqual([]);
 			writeFileSync(robots, original.toString('utf8').replace('\n', '\r\r\n'));
-			expect(generate({ check: true }).problems).toContain('malformed: discovery/robots.txt');
-			expect(generate({ check: false }).problems).toContain('malformed: discovery/robots.txt');
+			expect(generate({ check: true }).problems).toEqual(['malformed: discovery/robots.txt']);
+			expect(generate({ check: false }).problems).toEqual(['malformed: discovery/robots.txt']);
 			expect(readFileSync(robots).equals(original)).toBe(true);
 			expect(generate({ check: true }).problems).toEqual([]);
 		} finally {
 			writeFileSync(robots, original);
+		}
+	});
+
+	it('throws an unreadable output instead of reporting it as malformed', () => {
+		const dir = mkdtempSync(join(tmpdir(), 'kofra-mcp-eol-'));
+		try {
+			let thrown: unknown;
+			try {
+				readText(join(dir, 'missing.md'));
+			} catch (err) {
+				thrown = err;
+			}
+			expect(thrown).toBeInstanceOf(Error);
+			expect(thrown).not.toBeInstanceOf(StrayCarriageReturnError);
+			writeFileSync(join(dir, 'cr.md'), 'a\rb');
+			expect(() => readText(join(dir, 'cr.md'))).toThrow(StrayCarriageReturnError);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
 		}
 	});
 

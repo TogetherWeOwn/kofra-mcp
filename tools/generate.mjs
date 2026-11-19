@@ -39,12 +39,15 @@ const SLUG_WEIGHT = 2;
  * one in CR CR LF after a doubled conversion) is refused before normalising,
  * so it can never turn into an accepted line break.
  */
+/** readText's refusal of a stray carriage return; other errors are I/O. */
+export class StrayCarriageReturnError extends Error {}
+
 export function readText(p) {
 	const raw = readFileSync(p, 'utf8');
 	const stray = raw.search(/\r(?!\n)/);
 	if (stray >= 0) {
 		const line = raw.slice(0, stray).split('\n').length;
-		throw new Error(`${p}:${line}: carriage return not followed by a newline`);
+		throw new StrayCarriageReturnError(`${p}:${line}: carriage return not followed by a newline`);
 	}
 	return raw.replace(/\r\n/g, '\n');
 }
@@ -467,8 +470,9 @@ export function generate({ check }) {
 		if (!outputs.has(p)) problems.push(`extra: ${relative(ROOT, p)}`);
 	}
 	// Existing outputs are only compared, never trusted: one that readText
-	// refuses (a stray carriage return) is reported as malformed, so --check
-	// fails on it and write mode simply replaces it.
+	// refuses for a stray carriage return is reported as malformed, so --check
+	// fails on it and write mode simply replaces it. Any other read error (an
+	// unreadable file) is thrown here, before anything is written.
 	for (const [p, text] of outputs) {
 		if (!existsSync(p)) {
 			problems.push(`missing: ${relative(ROOT, p)}`);
@@ -477,7 +481,8 @@ export function generate({ check }) {
 		let current;
 		try {
 			current = readText(p);
-		} catch {
+		} catch (err) {
+			if (!(err instanceof StrayCarriageReturnError)) throw err;
 			problems.push(`malformed: ${relative(ROOT, p)}`);
 			continue;
 		}
