@@ -42,7 +42,7 @@ jobs:
       actions: read # Nested OSV reads same-run comparison artifacts.
       contents: read
       security-events: write # Nested OSV uploads comparison SARIF.
-    uses: TogetherWeOwn/.github/.github/workflows/public-pr-security.yml@c1e39ff4aa3369b53cc28de36fcd43aef2640b52 # v0.12.0
+    uses: TogetherWeOwn/.github/.github/workflows/public-pr-security.yml@8059ac2b121b63443db656b1e10e927b8af8133c # v0.12.1
 
   workflow-lint:
     name: workflow lint (actionlint, zizmor)
