@@ -281,6 +281,37 @@ describe('browser preflight for the MCP transports', () => {
 		});
 	}
 
+	for (const era of ['modern', 'legacy'] as Era[]) {
+		it(`serves the ${era} SDK client from an allowed browser Origin, with CORS on every response`, async () => {
+			const origin = 'https://console.kofra.app';
+			const seen: Response[] = [];
+			const client = new Client(
+				{ name: 'browser-probe', version: '0.0.0' },
+				era === 'modern' ? { versionNegotiation: { mode: { pin: '2026-07-28' } } } : {}
+			);
+			const transport = new StreamableHTTPClientTransport(new URL(`${BASE}/docs`), {
+				fetch: async (url, init) => {
+					const headers = new Headers(init?.headers);
+					headers.set('Origin', origin);
+					const res = await call(url instanceof URL ? url.href : url, { ...init, headers });
+					seen.push(res);
+					return res;
+				}
+			});
+			await client.connect(transport);
+			expect((await client.listTools()).tools.map((t) => t.name)).toContain('docs_search');
+			const found = await client.callTool({ name: 'docs_search', arguments: { query: 'bucket' } });
+			expect(found.isError ?? false).toBe(false);
+			await client.readResource({ uri: 'kofra://openapi' });
+			await client.close();
+			expect(seen.length).toBeGreaterThan(0);
+			for (const res of seen) {
+				expect(res.headers.get('Access-Control-Allow-Origin'), res.url).toBe(origin);
+				expect(res.headers.get('Vary') ?? '', res.url).toMatch(/origin/i);
+			}
+		});
+	}
+
 	it('exposes the MCP response headers the client reads', async () => {
 		const res = await call('/docs', {
 			method: 'POST',
@@ -325,6 +356,29 @@ describe('line endings in the build-time sanitising check', () => {
 			const p = join(dir, 'page.md');
 			writeFileSync(p, '# A\r\n\r\ntext\r\n');
 			expect(readText(p)).toBe('# A\n\ntext\n');
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('refuses a stray carriage return before normalising, CR CR LF included', () => {
+		const dir = mkdtempSync(join(tmpdir(), 'kofra-mcp-eol-'));
+		try {
+			const p = join(dir, 'page.md');
+			for (const text of ['# A\r\r\ntext\r\n', '# A\n\ntext\r\r\n', '# A\rB\n', '# A\n\r']) {
+				writeFileSync(p, text);
+				expect(() => readText(p), JSON.stringify(text)).toThrow(
+					/carriage return not followed by a newline/
+				);
+			}
+			writeFileSync(p, '# A\r\n\r\ntext\r\n');
+			expect(
+				unsanitisedStrings({
+					pages: [{ slug: 'a', title: 'A', description: 'd', text: readText(p) }],
+					errors: [],
+					openapi: '{}'
+				})
+			).toEqual([]);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

@@ -35,9 +35,19 @@ const SLUG_WEIGHT = 2;
 /**
  * Reads a text file with LF line endings, whatever the checkout used (for
  * example core.autocrlf on Windows), so the bundle and --check do not depend
- * on it. A lone carriage return is kept and fails the sanitising check.
+ * on it. A carriage return not followed by a newline (a lone CR, or the stray
+ * one in CR CR LF after a doubled conversion) is refused before normalising,
+ * so it can never turn into an accepted line break.
  */
-export const readText = (p) => readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
+export function readText(p) {
+	const raw = readFileSync(p, 'utf8');
+	const stray = raw.search(/\r(?!\n)/);
+	if (stray >= 0) {
+		const line = raw.slice(0, stray).split('\n').length;
+		throw new Error(`${p}:${line}: carriage return not followed by a newline`);
+	}
+	return raw.replace(/\r\n/g, '\n');
+}
 const readJson = (p) => JSON.parse(readText(p));
 
 // ---------------------------------------------------------------------------
