@@ -502,8 +502,11 @@ export function generate({ check }) {
 	}
 	if (!check) {
 		for (const p of extra) rmSync(p, { force: true });
+		// Replace by unlinking first, so a read-only output in a writable
+		// directory is replaced like the old remove-and-rewrite did.
 		for (const p of changed) {
 			mkdirSync(dirname(p), { recursive: true });
+			rmSync(p, { force: true });
 			writeFileSync(p, outputs.get(p));
 		}
 	}
@@ -517,13 +520,15 @@ export function generate({ check }) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	const check = process.argv.includes('--check');
-	const { problems, written, pages } = generate({ check });
+	const { problems, written, changed, pages } = generate({ check });
 	if (check && problems.length) {
 		for (const p of problems) console.error(`generate --check: ${p}`);
 		console.error('generate --check: outputs are out of date; run `pnpm run gen` and commit');
 		process.exit(1);
 	}
 	console.log(
-		`generate${check ? ' --check' : ''}: ${pages} pages, ${written} outputs ${check ? 'up to date' : 'written'}`
+		check
+			? `generate --check: ${pages} pages, ${written} outputs up to date`
+			: `generate: ${pages} pages, ${written} outputs, ${changed.length} written`
 	);
 }

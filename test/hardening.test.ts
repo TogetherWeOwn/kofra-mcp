@@ -376,6 +376,8 @@ describe('line endings in the build-time sanitising check', () => {
 			// is already current (otherwise run `pnpm run gen` first).
 			expect(generate({ check: true }).problems, 'outputs must be current first').toEqual([]);
 			writeFileSync(robots, original.toString('utf8').replace('\n', '\r\r\n'));
+			// Read-only, in a writable directory: write mode still replaces it.
+			chmodSync(robots, 0o444);
 			expect(generate({ check: true }).problems).toEqual(['malformed: discovery/robots.txt']);
 			const fixed = generate({ check: false });
 			expect(fixed.problems).toEqual(['malformed: discovery/robots.txt']);
@@ -384,11 +386,13 @@ describe('line endings in the build-time sanitising check', () => {
 			expect(readFileSync(robots).equals(original)).toBe(true);
 			expect(generate({ check: true }).problems).toEqual([]);
 		} finally {
+			rmSync(robots, { force: true });
 			writeFileSync(robots, original);
 		}
 	});
 
-	it.skipIf(process.getuid?.() === 0)(
+	// POSIX only: Windows cannot make a file unreadable with chmod, and root reads it anyway.
+	it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
 		'generate throws when an existing output cannot be read, before writing anything',
 		() => {
 			const robots = fileURLToPath(new URL('../discovery/robots.txt', import.meta.url).href);

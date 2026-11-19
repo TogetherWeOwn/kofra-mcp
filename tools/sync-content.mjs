@@ -60,7 +60,7 @@ writeFileSync(
 	].join('\n')
 );
 
-const { written } = generate({ check: false });
+const { written, changed } = generate({ check: false });
 console.log(
-	`sync-content: copied ${pages.length} error pages and the contract at ${sha.slice(0, 12)}; ${written} generated files`
+	`sync-content: copied ${pages.length} error pages and the contract at ${sha.slice(0, 12)}; ${written} generated files (${changed.length} written)`
 );
