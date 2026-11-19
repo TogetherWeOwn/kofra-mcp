@@ -370,11 +370,14 @@ describe('line endings in the build-time sanitising check', () => {
 	it('reports a malformed generated output in --check mode and replaces it in write mode', () => {
 		const robots = fileURLToPath(new URL('../discovery/robots.txt', import.meta.url).href);
 		const original = readFileSync(robots);
+		const mode = statSync(robots).mode & 0o777;
+		let planted = false;
 		try {
 			// Write mode below runs on the real checkout. It may only touch the
 			// planted file, so the test refuses to go on unless every other output
 			// is already current (otherwise run `pnpm run gen` first).
 			expect(generate({ check: true }).problems, 'outputs must be current first').toEqual([]);
+			planted = true;
 			writeFileSync(robots, original.toString('utf8').replace('\n', '\r\r\n'));
 			// Read-only, in a writable directory: write mode still replaces it.
 			chmodSync(robots, 0o444);
@@ -386,8 +389,12 @@ describe('line endings in the build-time sanitising check', () => {
 			expect(readFileSync(robots).equals(original)).toBe(true);
 			expect(generate({ check: true }).problems).toEqual([]);
 		} finally {
-			rmSync(robots, { force: true });
-			writeFileSync(robots, original);
+			// Only undo what this test did: the bytes and the original mode.
+			if (planted) {
+				rmSync(robots, { force: true });
+				writeFileSync(robots, original);
+				chmodSync(robots, mode);
+			}
 		}
 	});
 
