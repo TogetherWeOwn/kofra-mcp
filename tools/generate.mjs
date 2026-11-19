@@ -466,9 +466,22 @@ export function generate({ check }) {
 	for (const p of existingApi) {
 		if (!outputs.has(p)) problems.push(`extra: ${relative(ROOT, p)}`);
 	}
+	// Existing outputs are only compared, never trusted: one that readText
+	// refuses (a stray carriage return) is reported as malformed, so --check
+	// fails on it and write mode simply replaces it.
 	for (const [p, text] of outputs) {
-		if (!existsSync(p)) problems.push(`missing: ${relative(ROOT, p)}`);
-		else if (readText(p) !== text) problems.push(`stale: ${relative(ROOT, p)}`);
+		if (!existsSync(p)) {
+			problems.push(`missing: ${relative(ROOT, p)}`);
+			continue;
+		}
+		let current;
+		try {
+			current = readText(p);
+		} catch {
+			problems.push(`malformed: ${relative(ROOT, p)}`);
+			continue;
+		}
+		if (current !== text) problems.push(`stale: ${relative(ROOT, p)}`);
 	}
 	if (!check) {
 		rmSync(API_DIR, { recursive: true, force: true });
