@@ -12,15 +12,20 @@
 //            "-", lowercased, separators removed), terms of 5+ characters;
 //   short    terms under 5 characters, matched as the start of a token or of a
 //            token part, so random-looking strings do not trip them;
-//   prose    ordinary words, matched whole and case-insensitively only in
-//            customer-readable text: Markdown, and the description, summary,
+//   prose    ordinary words, matched case-insensitively as whole words and as
+//            each hyphen-separated and camelCase part of a word, only in
+//            customer-readable text: Markdown, HTML, plain text, files without
+//            an extension (LICENSE), comments in code, and the description, summary,
 //            title, hint, detail, meaning, reason, note and label strings of
 //            JSON and YAML files. Exact tokens in tools/f7/allow.json are
 //            skipped there (for example the HTTP method name in capitals, and its
 //            plural).
 //
 // Plus two plain-text rules: no e-mail address outside the example and
-// Kofra role domains, and no home-directory path.
+// Kofra role domains, and no home-directory path. File paths themselves are
+// checked with the strict, short, e-mail and path rules. It fails closed: a
+// file that cannot be read, or that holds a NUL byte without a binary
+// extension, is a finding.
 //
 // Usage: node tools/f7/check.mjs [paths...]   (default: every tracked file)
 // Exit 1 and one line per hit (file:line, class, the matched text) on failure.
@@ -72,8 +77,10 @@ const COMMENT_EXT = new Set([
 const COMMENT = /(?:^|\s)(?:\/\/+|#|\/\*+|\*)\s?(.*)$/;
 const EMAIL = /[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g;
 const EMAIL_OK = /@(example\.(com|org|net)|kofra\.(app|io))$/i;
+// Home directories: /home/<name>, /Users/<name>, the root home, ~/<path>, and
+// Windows user folders, with single or doubled (escaped) separators.
 const HOME_PATH =
-	/(^|[^A-Za-z0-9])(\/(home|Users)\/[A-Za-z][A-Za-z0-9._-]*|\/root\/|[A-Za-z]:\\Users\\)/;
+	/(^|[^A-Za-z0-9])(\/(home|Users)\/[A-Za-z][A-Za-z0-9._-]*|\/(?:root)(\/|\b)|[A-Za-z]:\\{1,2}Users\\{1,2})|(^|[\s"'=(:`])~\/[A-Za-z0-9._-]/;
 // Only for the short class: integrity strings, checksums and base64 blobs are
 // random enough to start a token part with a short term by chance, so they are
 // blanked before that class runs. The strict class scans every line whole.
@@ -93,6 +100,8 @@ const BINARY_EXT = new Set([
 	'.pdf'
 ]);
 const SELF = new Set(['tools/f7/terms.json']);
+// Customer-readable as a whole; '' is a file without an extension (LICENSE).
+const PROSE_EXT = new Set(['.md', '.txt', '.html', '']);
 
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 const memo = new Map();
@@ -138,17 +147,34 @@ export function scanLine(line) {
 	return hits.filter((h) => !seen.has(h.cls + h.text) && seen.add(h.cls + h.text));
 }
 
-/** Prose hits: whole words of customer-readable text. */
+/** Prose hits: whole words of customer-readable text, and their parts. */
 export function scanProse(text) {
 	const hits = [];
 	for (const m of text.matchAll(/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/g)) {
 		const word = m[0];
 		if (allow.has(word)) continue;
 		const lower = word.toLowerCase();
-		if (PROSE.has(hashed(lower)) || PROSE.has(hashed(lower.replace(/-/g, ''))))
-			hits.push({ cls: 'prose', text: word });
+		const candidates = [
+			lower,
+			lower.replace(/-/g, ''),
+			...word
+				.split(PART_EDGE)
+				.filter((p) => p && !allow.has(p))
+				.map((p) => p.toLowerCase())
+		];
+		if (candidates.some((c) => PROSE.has(hashed(c)))) hits.push({ cls: 'prose', text: word });
 	}
 	return hits;
+}
+
+/** Strict, short, e-mail and home-path hits in a file path. */
+export function scanPath(path) {
+	const findings = scanLine(path).map((h) => ({ path, line: 0, ...h }));
+	for (const m of path.matchAll(EMAIL))
+		if (!EMAIL_OK.test(m[0])) findings.push({ path, line: 0, cls: 'email', text: m[0] });
+	if (HOME_PATH.test(path))
+		findings.push({ path, line: 0, cls: 'path', text: path.match(HOME_PATH)[0].trim() });
+	return findings;
 }
 
 function proseStrings(value, out = [], key = '') {
@@ -181,7 +207,7 @@ export function scanText(path, text) {
 			if (c) scanProse(c[1]).forEach((h) => findings.push({ path, line: i + 1, ...h }));
 		});
 	}
-	if (ext === '.md' || ext === '.txt') {
+	if (PROSE_EXT.has(ext)) {
 		lines.forEach((line, i) =>
 			scanProse(line).forEach((h) => findings.push({ path, line: i + 1, ...h }))
 		);
@@ -229,22 +255,36 @@ function listFiles(args, root) {
 	return out;
 }
 
-function main() {
-	const root = process.cwd();
-	const files = listFiles(process.argv.slice(2), root).filter(
-		(f) => !SELF.has(f) && !BINARY_EXT.has(extname(f))
-	);
-	const findings = [];
+/** Every finding in `files` (paths relative to `root`), paths included. */
+export function scanFiles(root, files) {
+	const findings = files.flatMap((f) => scanPath(f));
 	for (const f of files) {
+		if (SELF.has(f) || BINARY_EXT.has(extname(f))) continue;
 		let text;
 		try {
 			text = readFileSync(join(root, f), 'utf8');
-		} catch {
+		} catch (err) {
+			findings.push({ path: f, line: 1, cls: 'unreadable', text: err.code ?? 'read error' });
 			continue;
 		}
-		if (text.includes('\0')) continue;
+		if (text.includes('\0')) {
+			findings.push({
+				path: f,
+				line: 1,
+				cls: 'binary',
+				text: 'NUL byte in a non-binary file type'
+			});
+			continue;
+		}
 		findings.push(...scanText(f, text));
 	}
+	return findings;
+}
+
+function main() {
+	const root = process.cwd();
+	const files = listFiles(process.argv.slice(2), root);
+	const findings = scanFiles(root, files);
 	if (findings.length) {
 		for (const h of findings) console.error(`${h.path}:${h.line}: F7 ${h.cls} term in "${h.text}"`);
 		console.error(`F7 deny-list: ${findings.length} finding(s) in ${files.length} files`);

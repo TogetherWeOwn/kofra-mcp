@@ -2,7 +2,8 @@
 
 The Kofra API manages a storage workspace: buckets, S3 access keys, usage, the account's state and its
 event feed. Object data never goes through this API; read and write objects through the S3 endpoint with
-any S3 tool, or with a presigned URL from `POST /v1/objects/presign`.
+any S3 tool. To let someone download one object without credentials, create a presigned download URL with
+`POST /v1/objects/presign`.
 
 ```sh
 export KOFRA_API_TOKEN='...'   # an API token from the console
@@ -26,7 +27,9 @@ that says what to do next, a `docs_url`, the `request_id` and `retryable`. Branc
 ## Lists
 
 Lists use cursor pagination: `limit` (1 to 200, default 50) and `cursor`. The body has `data` and
-`next_cursor`, which is `null` on the last page, and a `Link: <...>; rel="next"` header repeats it.
+`next_cursor`, which is `null` on the last page, and a `Link: <...>; rel="next"` header repeats it. The
+[event feed](api/events.list.md) is the exception: at its end `next_cursor` is the position to poll from
+next, never `null`.
 
 ## Writes
 

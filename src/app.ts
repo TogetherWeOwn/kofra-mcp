@@ -12,34 +12,97 @@ export const MCP_ROUTE = '/docs';
 export const ROBOTS_HEADER_VALUE = 'noindex';
 
 /**
- * Browser origins allowed to call the MCP endpoint. Requests without an
- * Origin (non-browser MCP clients) are always allowed; a browser page on any
- * other origin is refused with 403 before the request reaches the server.
- * Local origins stay allowed so browser-based MCP inspectors work in
- * development; the documentation is public, so they gain nothing else.
+ * Browser origins allowed to call the MCP endpoint, compared as whole
+ * origins (scheme, host and port), so plain http or another port on an
+ * allow-listed host is refused. Requests without an Origin (non-browser MCP
+ * clients) are always allowed.
  */
-export const ALLOWED_ORIGIN_HOSTNAMES = [
-	...localhostAllowedOrigins(),
-	'kofra.app',
-	'www.kofra.app',
-	'console.kofra.app',
-	'mcp.kofra.app'
-];
+export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
+	'https://kofra.app',
+	'https://www.kofra.app',
+	'https://console.kofra.app',
+	'https://mcp.kofra.app'
+]);
 
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Local origins (any scheme of http/https and any port) are accepted only
+ * when the server itself is reached on a local host, so browser-based MCP
+ * inspectors work in development while a deployed Worker refuses them.
+ */
+function isLocalOrigin(origin: URL): boolean {
+	return (
+		(origin.protocol === 'http:' || origin.protocol === 'https:') &&
+		LOCAL_HOSTNAMES.has(origin.hostname)
+	);
+}
+
+/** The accepted Origin, null when there is none, or false when it is refused. */
+export function acceptedOrigin(request: Request, url: URL): string | null | false {
+	const raw = request.headers.get('Origin');
+	if (raw === null) return null;
+	if (ALLOWED_ORIGINS.has(raw)) return raw;
+	let origin: URL;
+	try {
+		origin = new URL(raw);
+	} catch {
+		return false;
+	}
+	// Only a serialised origin is accepted: no path, credentials or trailing dot tricks.
+	if (origin.origin !== raw) return false;
+	if (isLocalOrigin(origin) && LOCAL_HOSTNAMES.has(url.hostname)) return raw;
+	return false;
+}
+
+// The SDK's own hostname check stays on as a second layer behind
+// acceptedOrigin(). Its CORS headers are off: they carry one fixed origin per
+// handler, while this Worker echoes the origin it accepted (see withCors).
 const mcp = createMcpHandler(createServer, {
 	route: MCP_ROUTE,
-	allowedOriginHostnames: ALLOWED_ORIGIN_HOSTNAMES
+	allowedOriginHostnames: [
+		...localhostAllowedOrigins(),
+		...[...ALLOWED_ORIGINS].map((o) => new URL(o).hostname)
+	],
+	corsOptions: false
 });
 
-const STATIC_HEADERS = {
-	'Cache-Control': 'public, max-age=3600',
-	'X-Content-Type-Options': 'nosniff'
+const CORS_HEADERS = {
+	'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+	'Access-Control-Allow-Headers':
+		'Content-Type, Accept, Authorization, Last-Event-ID, Mcp-Session-Id, Mcp-Protocol-Version, Mcp-Method, Mcp-Name',
+	'Access-Control-Expose-Headers': 'Mcp-Session-Id, Mcp-Protocol-Version',
+	'Access-Control-Max-Age': '86400'
 };
 
+/** Adds CORS headers for an accepted browser origin; Vary: Origin always. */
+function withCors(response: Response, origin: string | null): Response {
+	const headers = new Headers(response.headers);
+	headers.append('Vary', 'Origin');
+	if (origin !== null) {
+		headers.set('Access-Control-Allow-Origin', origin);
+		for (const [k, v] of Object.entries(CORS_HEADERS)) headers.set(k, v);
+	}
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers
+	});
+}
+
+const PUBLIC_CACHE = 'public, max-age=3600';
+const NO_STORE = 'no-store';
+
+/** Only a successful static answer may be cached; anything else is no-store. */
 function text(body: string, type: string, status = 200, extra: HeadersInit = {}): Response {
 	return new Response(body, {
 		status,
-		headers: { 'Content-Type': `${type}; charset=utf-8`, ...STATIC_HEADERS, ...extra }
+		headers: {
+			'Content-Type': `${type}; charset=utf-8`,
+			'Cache-Control': status === 200 ? PUBLIC_CACHE : NO_STORE,
+			'X-Content-Type-Options': 'nosniff',
+			...extra
+		}
 	});
 }
 
@@ -78,14 +141,27 @@ function staticRoute(request: Request, url: URL): Response | undefined {
 
 async function route(request: Request, env: unknown, ctx: ExecutionContext): Promise<Response> {
 	const url = new URL(request.url);
-	if (url.pathname === MCP_ROUTE) return mcp(request, env, ctx);
+	if (url.pathname === MCP_ROUTE) {
+		const origin = acceptedOrigin(request, url);
+		if (origin === false) return text('Forbidden: Origin not allowed\n', 'text/plain', 403);
+		if (request.method === 'OPTIONS')
+			return withCors(
+				new Response(null, { status: 204, headers: { 'Cache-Control': NO_STORE } }),
+				origin
+			);
+		return withCors(await mcp(request, env, ctx), origin);
+	}
 	return staticRoute(request, url) ?? notFound();
 }
 
-/** Copies a response with X-Robots-Tag set (handler responses may be immutable). */
+/**
+ * Copies a response with X-Robots-Tag set (handler responses may be
+ * immutable). Error answers, including the MCP handler's, are never cached.
+ */
 export function withNoindex(response: Response): Response {
 	const headers = new Headers(response.headers);
 	headers.set('X-Robots-Tag', ROBOTS_HEADER_VALUE);
+	if (response.status >= 400) headers.set('Cache-Control', NO_STORE);
 	return new Response(response.body, {
 		status: response.status,
 		statusText: response.statusText,

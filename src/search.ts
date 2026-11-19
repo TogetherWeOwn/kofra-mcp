@@ -28,8 +28,11 @@ export function search(query: string, limit: number): { hits: SearchHit[]; total
 	const n = pages.length;
 	const scores = new Map<number, number>();
 	for (const term of terms) {
+		// Own properties only: a query word such as "constructor" must not
+		// resolve to something inherited from Object.prototype.
+		if (!Object.hasOwn(index.postings, term)) continue;
 		const postings = index.postings[term];
-		if (!postings) continue;
+		if (!Array.isArray(postings)) continue;
 		const idf = Math.log(1 + (n - postings.length + 0.5) / (postings.length + 0.5));
 		for (const [doc, tf] of postings) {
 			const len = index.lengths[doc] ?? index.avgLength;

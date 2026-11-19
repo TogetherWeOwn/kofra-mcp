@@ -1921,8 +1921,8 @@
                       "errors": [
                         {
                           "pointer": "/name",
-                          "code": "invalid_bucket_name",
-                          "detail": "Must be 3 to 63 lowercase letters, digits or hyphens."
+                          "code": "invalid_value",
+                          "detail": "Not a valid value."
                         }
                       ]
                     }
@@ -3830,9 +3830,9 @@
                       "retryable": false,
                       "errors": [
                         {
-                          "pointer": "/name",
-                          "code": "invalid_bucket_name",
-                          "detail": "Must be 3 to 63 lowercase letters, digits or hyphens."
+                          "pointer": "/grants",
+                          "code": "invalid_value",
+                          "detail": "Not a valid value."
                         }
                       ]
                     }
@@ -4467,8 +4467,8 @@
                       "errors": [
                         {
                           "pointer": "/name",
-                          "code": "invalid_bucket_name",
-                          "detail": "Must be 3 to 63 lowercase letters, digits or hyphens."
+                          "code": "invalid_value",
+                          "detail": "Not a valid value."
                         }
                       ]
                     }
@@ -7211,9 +7211,9 @@
                       "retryable": false,
                       "errors": [
                         {
-                          "pointer": "/name",
-                          "code": "invalid_bucket_name",
-                          "detail": "Must be 3 to 63 lowercase letters, digits or hyphens."
+                          "pointer": "/bucket",
+                          "code": "invalid_value",
+                          "detail": "Not a valid value."
                         }
                       ]
                     }
@@ -8250,40 +8250,42 @@
         ],
         "properties": {
           "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64
+            "$ref": "#/components/schemas/KeyName"
           },
           "grants": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 32,
-            "description": "The buckets the key can reach. Each bucket at most once.",
-            "items": {
-              "$ref": "#/components/schemas/GrantInput"
-            }
+            "$ref": "#/components/schemas/Grants",
+            "description": "The buckets the key can reach. Each bucket at most once."
           }
         }
       },
       "AccessKeyUpdate": {
         "type": "object",
+        "description": "At least one of `name` and `grants`. An empty `grants` list is refused; leave `grants` out to keep the grants as they are.",
         "additionalProperties": false,
         "minProperties": 1,
         "properties": {
           "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64
+            "$ref": "#/components/schemas/KeyName"
           },
           "grants": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 32,
-            "description": "Grants to add or widen. Grants not listed are kept. Each bucket at most once. A key holds at most 32 grants.",
-            "items": {
-              "$ref": "#/components/schemas/GrantInput"
-            }
+            "$ref": "#/components/schemas/Grants",
+            "description": "Grants to add or widen. Grants not listed are kept. Each bucket at most once. A key holds at most 32 grants."
           }
+        }
+      },
+      "KeyName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "description": "A label for people; not used for access."
+      },
+      "Grants": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 32,
+        "description": "1 to 32 grants, each bucket at most once; a bucket listed twice is refused with `validation_failed`.",
+        "items": {
+          "$ref": "#/components/schemas/GrantInput"
         }
       },
       "AccessKeyList": {

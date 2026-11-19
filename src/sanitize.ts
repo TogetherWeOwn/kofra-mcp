@@ -3,15 +3,28 @@
 
 // ANSI/VT escape sequences: CSI (ESC [ or 0x9b), OSC (ESC ] ... BEL or ST),
 // DCS/SOS/PM/APC strings, and the remaining two-byte ESC sequences.
+//
+// A string sequence (OSC, DCS, SOS, PM, APC) ends at its terminator (BEL,
+// ESC \ or 0x9c), at the next escape sequence, or at the end of the line, so
+// an unterminated payload is removed with its introducer instead of left
+// behind as text. The body class excludes every character that can end it,
+// and one of the endings always matches right after the body, so the match
+// never backtracks: the cost is linear in the input however long the
+// payload is.
 const ESCAPES =
 	// eslint-disable-next-line no-control-regex
-	/(?:\u001b\[|\u009b)[0-?]*[ -/]*[@-~]|(?:\u001b[\]PX^_]|[\u0090\u0098\u009d-\u009f])[\s\S]*?(?:\u0007|\u001b\\|\u009c)|\u001b[ -~]?/g;
+	/(?:\u001b\[|\u009b)[0-?]*[ -/]*[@-~]|(?:\u001b[\]PX^_]|[\u0090\u0098\u009d-\u009f])[^\u0007\u001b\u009c\n]*(?:\u0007|\u001b\\|\u009c|(?=\u001b)|$)|\u001b[ -~]?/gm;
 
-// C0 and C1 controls except tab and newline, DEL, and the bidirectional
-// overrides and isolates that can make text display differently from how it
-// reads.
-// eslint-disable-next-line no-control-regex
-const CONTROLS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g;
+// Characters that are invisible or change how text displays: C0 and C1
+// controls except tab and newline, DEL, the soft hyphen, zero-width and
+// directional marks (U+200B-200F), the line and paragraph separators, the
+// bidirectional embeddings, overrides and isolates, the invisible operators
+// (U+2060-2064), the byte-order mark and the tag characters (U+E0000-E007F),
+// which can carry hidden text. tools/generate.mjs applies the same set at
+// build time.
+const CONTROLS =
+	// eslint-disable-next-line no-control-regex
+	/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\u{e0000}-\u{e007f}]/gu;
 
 /** Removes escape sequences and control characters; keeps tabs and newlines. */
 export function stripControls(text: string): string {

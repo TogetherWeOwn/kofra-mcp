@@ -229,10 +229,16 @@ describe('HTTP surface over wrangler dev', () => {
 		await foreign.arrayBuffer();
 		assert.equal(foreign.status, 403);
 		assertNoindex(foreign, 'foreign Origin');
+		assert.equal(foreign.headers.get('cache-control'), 'no-store');
+
+		const plain = await fetch(`${base}/docs`, init('http://kofra.app'));
+		await plain.arrayBuffer();
+		assert.equal(plain.status, 403);
 
 		const own = await fetch(`${base}/docs`, init('https://kofra.app'));
 		await own.arrayBuffer();
 		assert.equal(own.status, 200);
 		assertNoindex(own, 'allowed Origin');
+		assert.equal(own.headers.get('access-control-allow-origin'), 'https://kofra.app');
 	});
 });

@@ -4,8 +4,13 @@ Kofra MCP servers. Today this is the public documentation MCP server: a Cloudfla
 client search and read the Kofra documentation, the API reference and the error catalogue, with no login. An
 account MCP server may follow later.
 
-**Status:** not deployed. Every response carries `X-Robots-Tag: noindex` and `/robots.txt` disallows
-everything until launch.
+**Status:** not deployed.
+
+**Indexing:** `X-Robots-Tag: noindex` on every response (pages, discovery files, MCP answers and errors) is
+the authoritative no-index control for the preview. `/robots.txt` also disallows everything, deliberately,
+until launch; while it does, compliant crawlers never fetch `/llms.txt` or `/.well-known/mcp.json` either, so
+the discovery files only reach clients that are pointed at them. When and how to open indexing at launch is
+an open decision.
 
 ## What the Worker serves
 
@@ -26,8 +31,12 @@ MCP tools, both read-only and free of account data:
 MCP resources: `kofra://docs/<slug>` (every page), `kofra://openapi` (the API contract as JSON) and
 `kofra://errors/<code>` (one error catalogue entry each).
 
-Browser requests whose `Origin` is not a Kofra or local origin are refused with 403. Non-browser clients send
-no `Origin` and are not affected.
+Browser requests must come from an exact allow-listed origin (`https://kofra.app`, `www.`, `console.` or `mcp.`
+on https, default port); local origins are accepted only when the server itself runs locally. Anything else
+gets 403, and `Access-Control-Allow-Origin` echoes the accepted origin, never `*`. Non-browser clients send no
+`Origin` and are not affected. Only successful static responses are cacheable (`public, max-age=3600`); errors
+are `no-store`. Every string the server returns is checked at build time to contain no control, escape or
+invisible characters, and tool text is sanitised again at run time.
 
 ## Content
 

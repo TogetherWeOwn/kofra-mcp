@@ -15,6 +15,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripControls } from '../src/sanitize.ts';
 import { tokenize } from '../src/tokenize.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -367,6 +368,35 @@ function readSource() {
  * Regenerates every derived file. With check true nothing is written and the
  * differences are returned instead.
  */
+/**
+ * Every string a client can receive must already be in its sanitised form, so
+ * structured fields (docs_read structuredContent, resources/read and
+ * resources/list, GET /docs/<slug>.md) never carry control, escape or
+ * invisible characters. Returns the path of each string that would change.
+ */
+export function unsanitisedStrings(bundle) {
+	const bad = [];
+	const dirty = (s) => typeof s === 'string' && stripControls(s) !== s;
+	const walkValue = (value, path) => {
+		if (typeof value === 'string') {
+			if (dirty(value)) bad.push(path);
+		} else if (Array.isArray(value)) {
+			value.forEach((v, i) => walkValue(v, `${path}[${i}]`));
+		} else if (value && typeof value === 'object') {
+			for (const [k, v] of Object.entries(value)) {
+				if (dirty(k)) bad.push(`${path} key ${JSON.stringify(k)}`);
+				walkValue(v, `${path}.${k}`);
+			}
+		}
+	};
+	for (const page of bundle.pages)
+		for (const field of ['title', 'description', 'text'])
+			if (dirty(page[field])) bad.push(`pages[${page.slug}].${field}`);
+	walkValue(bundle.errors, 'errors');
+	walkValue(JSON.parse(bundle.openapi), 'openapi');
+	return bad;
+}
+
 export function generate({ check }) {
 	const doc = readJson(join(CONTENT_DIR, 'openapi.json'));
 	const errors = readJson(join(CONTENT_DIR, 'errors.json')).errors;
@@ -403,6 +433,11 @@ export function generate({ check }) {
 		openapi: readFileSync(join(CONTENT_DIR, 'openapi.json'), 'utf8'),
 		discovery: { llmsTxt: llmsTxt(pages), mcpJson: mcpJson(), robotsTxt: ROBOTS }
 	};
+	const unsanitised = unsanitisedStrings(bundle);
+	if (unsanitised.length)
+		throw new Error(
+			`content has control, escape or invisible characters in: ${unsanitised.join(', ')}`
+		);
 	outputs.set(join(ROOT, 'generated', 'content.json'), `${JSON.stringify(bundle)}\n`);
 	outputs.set(join(ROOT, 'discovery', 'llms.txt'), bundle.discovery.llmsTxt);
 	outputs.set(join(ROOT, 'discovery', 'robots.txt'), ROBOTS);
