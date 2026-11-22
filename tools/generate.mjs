@@ -84,10 +84,11 @@ function typeName(doc, schema) {
 	return schema.format ? `${t} (${schema.format})` : t;
 }
 
-/** Table cell text: one line, pipes escaped. */
-const cell = (s) =>
+/** Table cell text: one line, with backslashes escaped before pipes. */
+export const cell = (s) =>
 	String(s ?? '')
 		.replace(/\s*\n\s*/g, ' ')
+		.replace(/\\/g, '\\\\')
 		.replace(/\|/g, '\\|')
 		.trim();
 
