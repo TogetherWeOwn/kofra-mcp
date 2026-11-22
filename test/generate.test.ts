@@ -43,5 +43,10 @@ describe('generated Markdown table cells', () => {
 		expect.soft(paramCells[3] && visibleText(paramCells[3])).toBe(`string (${format})`);
 		expect.soft(paramCells[4] && visibleText(paramCells[4])).toBe(descriptionText);
 		expect.soft(responseCells.map(visibleText)).toEqual(['200', descriptionText]);
+		for (const cell of [paramCells[4], responseCells[1]]) {
+			expect.soft(cell?.children?.find((node) => node.type === 'strong')).toMatchObject({
+				children: [{ type: 'text', value: 'bold' }]
+			});
+		}
 	});
 });
