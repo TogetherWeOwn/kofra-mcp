@@ -84,13 +84,17 @@ function typeName(doc, schema) {
 	return schema.format ? `${t} (${schema.format})` : t;
 }
 
-/** Table cell text: one line, with backslashes escaped before pipes. */
-export const cell = (s) =>
+const cellLine = (s) =>
 	String(s ?? '')
 		.replace(/\s*\n\s*/g, ' ')
-		.replace(/\\/g, '\\\\')
-		.replace(/\|/g, '\\|')
 		.trim();
+const escapePipes = (s) => s.replaceAll('|', '\\|');
+const textCell = (s) => escapePipes(cellLine(s).replaceAll('\\', '\\\\'));
+// Code spans treat source backslashes literally; only add table pipe escapes.
+const codeCell = (s) => escapePipes(cellLine(s));
+// Consume existing escape pairs before matching bare pipes so Markdown stays intact.
+const markdownCell = (s) =>
+	cellLine(s).replace(/\\.|\|/g, (token) => (token === '|' ? '\\|' : token));
 
 const shellQuote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
 
@@ -136,7 +140,7 @@ function curlExample(doc, base, method, path, op, params) {
 	return lines.join(' \\\n  ');
 }
 
-function operationPage(doc, errorsByCode, base, path, method, op, pathParams) {
+export function operationPage(doc, errorsByCode, base, path, method, op, pathParams) {
 	const params = [...(pathParams ?? []), ...(op.parameters ?? [])].map((p) => resolveRef(doc, p));
 	const M = method.toUpperCase();
 	const out = [];
@@ -161,7 +165,7 @@ function operationPage(doc, errorsByCode, base, path, method, op, pathParams) {
 		out.push('| Name | In | Required | Type | Description |', '|---|---|---|---|---|');
 		for (const p of params) {
 			out.push(
-				`| \`${cell(p.name)}\` | ${p.in} | ${p.required ? 'yes' : 'no'} | ${cell(typeName(doc, p.schema))} | ${cell(p.description)} |`
+				`| \`${codeCell(p.name)}\` | ${p.in} | ${p.required ? 'yes' : 'no'} | ${textCell(typeName(doc, p.schema))} | ${markdownCell(p.description)} |`
 			);
 		}
 		out.push('');
@@ -171,7 +175,7 @@ function operationPage(doc, errorsByCode, base, path, method, op, pathParams) {
 		const media = op.requestBody.content?.['application/json'];
 		out.push('## Request body', '');
 		out.push(
-			`\`application/json\`, ${op.requestBody.required ? 'required' : 'optional'}: ${cell(typeName(doc, media?.schema))}.`,
+			`\`application/json\`, ${op.requestBody.required ? 'required' : 'optional'}: ${textCell(typeName(doc, media?.schema))}.`,
 			''
 		);
 		const ex = firstExample(media);
@@ -181,7 +185,7 @@ function operationPage(doc, errorsByCode, base, path, method, op, pathParams) {
 	out.push('## Responses', '');
 	out.push('| Status | Description |', '|---|---|');
 	for (const [status, resp] of Object.entries(op.responses ?? {})) {
-		out.push(`| ${status} | ${cell(resolveRef(doc, resp).description)} |`);
+		out.push(`| ${status} | ${markdownCell(resolveRef(doc, resp).description)} |`);
 	}
 	out.push('');
 	const success = String(op['x-kofra-success'] ?? '');
@@ -202,7 +206,7 @@ function operationPage(doc, errorsByCode, base, path, method, op, pathParams) {
 			const e = errorsByCode.get(code);
 			if (!e) throw new Error(`${op.operationId}: error code ${code} is not in errors.json`);
 			out.push(
-				`| [\`${code}\`](../errors/${code}.md) | ${e.status} | ${e.retryable ? 'yes' : 'no'} | ${cell(e.title)} |`
+				`| [\`${code}\`](../errors/${code}.md) | ${e.status} | ${e.retryable ? 'yes' : 'no'} | ${textCell(e.title)} |`
 			);
 		}
 		out.push('');
@@ -244,7 +248,7 @@ function apiPages(doc, errors) {
 		index.push(`## ${tag}`, '', '| Operation | Method and path | Summary |', '|---|---|---|');
 		for (const o of list) {
 			index.push(
-				`| [\`${o.op.operationId}\`](${o.op.operationId}.md) | \`${o.method} ${o.path}\` | ${cell(o.op.summary)} |`
+				`| [\`${o.op.operationId}\`](${o.op.operationId}.md) | \`${o.method} ${o.path}\` | ${textCell(o.op.summary)} |`
 			);
 		}
 		index.push('');
