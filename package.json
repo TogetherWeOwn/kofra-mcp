@@ -27,7 +27,7 @@
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
 		"@modelcontextprotocol/client": "2.4.0",
-		"@types/node": "^24",
+		"@types/node": "^26",
 		"eslint": "^10.15.0",
 		"eslint-config-prettier": "^10.1.8",
 		"globals": "^17.14.0",
